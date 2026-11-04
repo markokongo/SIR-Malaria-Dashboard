@@ -1,0 +1,153 @@
+
+import streamlit as st
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
+# Dashboard configuration
+st.set_page_config(
+    page_title="SIR Malaria Dashboard",
+    layout="wide"
+)
+
+st.title("SIR Malaria Transmission Dashboard")
+
+st.write(
+    "An interactive mathematical model "
+    "of malaria transmission."
+)
+
+# Sidebar parameters
+st.sidebar.header("Model Parameters")
+
+N = st.sidebar.number_input(
+    "Total population",
+    min_value=100,
+    max_value=1000000,
+    value=10000
+)
+
+I0 = st.sidebar.number_input(
+    "Initial infected population",
+    min_value=1,
+    max_value=int(N)-1,
+    value=10
+)
+
+R0_initial = st.sidebar.number_input(
+    "Initial recovered population",
+    min_value=0,
+    max_value=int(N)-int(I0),
+    value=0
+)
+
+beta = st.sidebar.slider(
+    "Transmission rate (beta)",
+    0.01, 1.0, 0.30, 0.01
+)
+
+gamma = st.sidebar.slider(
+    "Recovery rate (gamma)",
+    0.01, 1.0, 0.10, 0.01
+)
+
+days = st.sidebar.slider(
+    "Simulation period (days)",
+    30, 365, 160
+)
+
+# Initial susceptible population
+S0 = N - I0 - R0_initial
+
+# SIR differential equations
+def sir_model(t, y, beta, gamma, N):
+
+    S, I, R = y
+
+    dS = -beta * S * I / N
+
+    dI = beta * S * I / N - gamma * I
+
+    dR = gamma * I
+
+    return [dS, dI, dR]
+
+# Time points
+t = np.arange(days + 1)
+
+# Numerical solution
+solution = solve_ivp(
+    sir_model,
+    [0, days],
+    [S0, I0, R0_initial],
+    t_eval=t,
+    args=(beta, gamma, N)
+)
+
+S, I, R = solution.y
+
+# Reproduction number
+reproduction_number = beta / gamma
+
+# Peak infection
+peak_infection = np.max(I)
+
+peak_day = t[np.argmax(I)]
+
+# Dashboard indicators
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "Peak infections",
+    f"{peak_infection:,.0f}"
+)
+
+col2.metric(
+    "Day of peak infection",
+    f"{peak_day}"
+)
+
+col3.metric(
+    "Basic reproduction number",
+    f"{reproduction_number:.2f}"
+)
+
+# Plot results
+fig, ax = plt.subplots(figsize=(12, 5))
+
+ax.plot(t, S, label="Susceptible")
+ax.plot(t, I, label="Infected")
+ax.plot(t, R, label="Recovered")
+
+ax.set_xlabel("Time (days)")
+ax.set_ylabel("Population")
+
+ax.set_title("SIR Malaria Transmission Dynamics")
+
+ax.legend()
+ax.grid(True, alpha=0.3)
+
+st.pyplot(fig)
+
+# Results table
+st.subheader("Simulation Results")
+
+df = pd.DataFrame({
+    "Day": t,
+    "Susceptible": S,
+    "Infected": I,
+    "Recovered": R
+})
+
+st.dataframe(df, use_container_width=True)
+
+# Download results
+csv = df.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    label="Download Simulation Results",
+    data=csv,
+    file_name="malaria_SIR_results.csv",
+    mime="text/csv"
+)
